@@ -65,6 +65,10 @@ Run the installer by adding execute permission and then execute it.
 chmod 755 TeensyduinoInstall.linux64
 ./TeensyduinoInstall.linux64
 ```
+Install missing package
+```console
+sudo apt-get install libusb-0.1-4
+```
 
 # Start Application on Boot
 This is acomplished by creating a systemd service with filename ```energiby.service```:
