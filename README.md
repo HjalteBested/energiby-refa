@@ -52,10 +52,19 @@ Finally complete the installation by running:
 sudo /opt/arduino-####/install.sh
 ```
 
-# Install Teensy
+# Install Teensyduino
 Download Teensyduino: https://www.pjrc.com/teensy/td_156/TeensyduinoInstall.linuxarm
 
-
+Linux Installation
+Download the Linux udev rules https://www.pjrc.com/teensy/00-teensy.rules and copy the file to /etc/udev/rules.d.
+```console
+sudo cp 00-teensy.rules /etc/udev/rules.d/
+```
+Run the installer by adding execute permission and then execute it.
+```console
+chmod 755 TeensyduinoInstall.linux64
+./TeensyduinoInstall.linux64
+```
 
 # Start Application on Boot
 This is acomplished by creating a systemd service with filename ```energiby.service```:
