@@ -13,14 +13,14 @@ elapsedMillis ledOnMillis;
 
 // NeoPixel Led Strips
 #define NUM_NEOPIXEL_STRIPS 6
-const unsigned char NeoPixelPin[NUM_NEOPIXEL_STRIPS]   = {33, 34, 35, 36, 37, 38};
-const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 14, 28, 29, 29};
-Adafruit_NeoPixel strip1(NeoPixelCount[0], NeoPixelPin[0], NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip2(NeoPixelCount[1], NeoPixelPin[1], NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip3(NeoPixelCount[2], NeoPixelPin[2], NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip4(NeoPixelCount[3], NeoPixelPin[3], NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip5(NeoPixelCount[4], NeoPixelPin[4], NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip6(NeoPixelCount[5], NeoPixelPin[5], NEO_GRB + NEO_KHZ800);
+const unsigned char NeoPixelPin[NUM_NEOPIXEL_STRIPS]   = {26, 33, 36, 35, 37, 38 };
+const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 30, 42,  2, 120};
+Adafruit_NeoPixel strip1(NeoPixelCount[0], NeoPixelPin[0], NEO_GRB + NEO_KHZ800); // 1 - PIN 26: 8x8  Matrix
+Adafruit_NeoPixel strip2(NeoPixelCount[1], NeoPixelPin[1], NEO_GRB + NEO_KHZ800); // 2 - PIN 33: 3x26 Left Side
+Adafruit_NeoPixel strip3(NeoPixelCount[2], NeoPixelPin[2], NEO_GRB + NEO_KHZ800); // 3 - PIN 36: 2x15 Silo
+Adafruit_NeoPixel strip4(NeoPixelCount[3], NeoPixelPin[3], NEO_GRB + NEO_KHZ800); // 4 - PIN 35: 3x14 Vind, Sol, Affald
+Adafruit_NeoPixel strip5(NeoPixelCount[4], NeoPixelPin[4], NEO_RGB + NEO_KHZ800); // 5 - PIN 37: 2x1  Silo Routing LEDs
+Adafruit_NeoPixel strip6(NeoPixelCount[5], NeoPixelPin[5], NEO_GRB + NEO_KHZ800); // 6 - PIN 38: Varme i Vejen
 
 Adafruit_NeoPixel* strips[NUM_NEOPIXEL_STRIPS] = {&strip1, &strip2, &strip3, &strip4, &strip5, &strip6};
 
@@ -28,7 +28,8 @@ elapsedMillis pixelUpdateMillis;
 unsigned long pixelUpdateInterval = 37;
 
 // Vind Variables
-auto& vind_strip = strip3;
+auto& vind_strip = strip4
+;
 float vind = 0.0f;
 float vind_max = 35.0f;
 float vind_numPixels = 14;
@@ -39,12 +40,12 @@ auto& sol_strip = strip4;
 float sol = 0.0f;
 float sol_max = 5.0f;
 float sol_numPixels = 14;
-int sol_pixelOffset = 0;
+int sol_pixelOffset = 14;
 
 // Bio Variables
 auto& bio_strip = strip4;
 float bio_numPixels = 14;
-int bio_pixelOffset = 14;
+int bio_pixelOffset = 28;
 float bio = 0;
 float bio_max = 60.0f;
 
@@ -66,8 +67,8 @@ float productionMin = 1.0f;
 float productionPercent = 1.0f;
 
 
-const uint8_t elActiveLedPIN = 26;
-const uint8_t heatActiveLedPIN = 27;
+const uint8_t elActiveLedPIN = 23;
+const uint8_t heatActiveLedPIN = 22;
 bool elActive = true;
 bool heatActive = true;
 
@@ -100,7 +101,7 @@ elapsedMillis startButtonElapsed;
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network:
 byte mac[] = {
-  0xDA, 0xA9, 0x1E, 0x2F, 0xAE, 0xE7
+  0xDA, 0xA9, 0x1E, 0x2F, 0x1E, 0xE7
 };
 
 // buffers for receiving and sending data
@@ -114,7 +115,7 @@ EthernetUDP Udp;
 // ----------------------------------------- //
 const unsigned int localPort = 7134;         // local port to listen for OSC packets (actually not used for sending)
 
-const IPAddress PiIp(192,168,1,33);        // remote IP of your computer
+const IPAddress PiIp(192,168,1,101);        // remote IP of your computer
 const unsigned int PiPort   = 7133;         // remote port to receive OSC
 
 const IPAddress BroadCastIp(255,255,255,255);     // remote IP of your computer
@@ -263,6 +264,7 @@ void setup() {
     colorWipe(Adafruit_NeoPixel::Color(255,   0,   0)     , 2); // Red
     colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 2); // Green
     colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 2); // Blue
+    colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 2); // White
     colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 2); // Blue
     Serial.println("....done");
 
