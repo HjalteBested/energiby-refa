@@ -88,3 +88,20 @@ TimeoutSec=infinity
 [Install]
 WantedBy=graphical.target
 ```
+
+# Access
+--- RaspberryPi ---
+```
+User : pi
+Password : EnergibyRefa
+```
+--- Router ---
+```
+User : admin
+Password : Energiby3
+```
+--- WLAN ---
+```
+SSID : EnergibyRefa
+Password : Energiby3
+```
