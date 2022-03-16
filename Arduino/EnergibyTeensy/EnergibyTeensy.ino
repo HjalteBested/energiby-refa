@@ -8,6 +8,29 @@
 
 #define PRINT_DEBUG
 
+/*
+14: Fill Button - Red
+15: Fill Button - Green
+16: Fill Button - SW
+17: Start Button - SW
+18: Start Button - LED
+19: Fill Button - Blue
+20: Charge Button - SW
+21: Use Button - SW
+22: Charge Button - LED
+23: Use Button - LED
+24: Air Pot (A10)
+26: 8x8  Matrix
+27: Silo Inside Strip
+33: 3x26 Left Side
+35: 3x14 Vind, Sol, Affald
+36: 2x15 Silo ControlPanel
+37: 2x1 Led -- Byen mangler fjernvarme, Byen mangler strøm
+38: Varme i Vejen
+*/
+
+
+
 // A variable to know how long the LED has been turned on
 elapsedMillis ledOnMillis;
 
@@ -32,6 +55,7 @@ unsigned long pixelUpdateInterval = 39;
 int pulse_vec[PULSELEN] = {15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 30, 45, 80, 115, 150, 185, 220, 255};
 
 
+bool gameRunning = false;
 
 // Vind Variables
 auto& vind_strip = strip4;
@@ -74,8 +98,6 @@ float productionPercent = 1.0f;
 // Silo Variables
 auto& silo_panel_strip         = strip3;
 auto& silo_strip               = strip7;
-bool charge_silo = true;
-bool use_silo    = true;
 float silo_available_pct     = 0.8f; // MW
 
 
@@ -147,7 +169,7 @@ EthernetUDP Udp;
 // ----------------------------------------- //
 const unsigned int localPort = 7134;         // local port to listen for OSC packets (actually not used for sending)
 
-const IPAddress PiIp(192,168,1,100);        // remote IP of your computer
+const IPAddress PiIp(192,168,1,103);        // remote IP of your computer
 const unsigned int PiPort   = 7133;         // remote port to receive OSC
 
 const IPAddress BroadCastIp(255,255,255,255);     // remote IP of your computer
@@ -163,29 +185,92 @@ OSCErrorCode error;
 unsigned long start = millis();
 unsigned long current_millis;
 
-// Digital Input Variables
-#define NUM_BUTTONS 4
-const byte buttonPINS[NUM_BUTTONS]   = {15, 16, 17, 18};
-// --- Bounce the Button's --->
-const int debounceTime = 20;
-Bounce bounceButtons[] = {
-  Bounce(buttonPINS[0], debounceTime), // 15: FillOven
-  Bounce(buttonPINS[1], debounceTime), // 16: StartGame
-  Bounce(buttonPINS[2], debounceTime), // 17: ChargeSilo
-  Bounce(buttonPINS[3], debounceTime), // 18: UseSilo
-};
+elapsedMillis buttonReadMillis;
+unsigned long buttonReadInterval = 23;
 
 enum buttonEnum {
   FillOven, StartGame, ChargeSilo, UseSilo
 };
 
-elapsedMillis buttonReadMillis;
-unsigned long buttonReadInterval = 23;
+struct LEDButton {
+  LEDButton(const int sw_pin, const int led_pin, bool a_value=false, const int debounceTime=20)
+    :m_sw_pin(sw_pin)
+    ,m_led_pin(led_pin)
+    ,bounce(sw_pin,debounceTime)
+    ,m_value(a_value)
+  {}
+
+  void setLED(bool value){
+    digitalWrite(m_led_pin, value);
+  }
+
+  void setValue(bool value){
+    m_value = value;
+    setLED(m_value);
+  }
+
+  bool getValue(){
+    return m_value;
+  }
+
+  void toggle(){
+    setValue(!m_value);
+  }
+
+  void setup(){
+    pinMode(m_sw_pin, INPUT_PULLUP);
+    pinMode(m_led_pin, OUTPUT);
+    setLED(m_value);
+  }
+
+  const int m_sw_pin;
+  const int m_led_pin;
+  Bounce bounce;
+  bool m_value;
+};
+
+struct RGBButton {
+  RGBButton(const int sw_pin, const int r_pin, const int g_pin, const int b_pin, const int debounceTime=20)
+    :m_sw_pin(sw_pin)
+    ,m_r_pin(r_pin)
+    ,m_g_pin(g_pin)
+    ,m_b_pin(b_pin)
+    ,bounce(sw_pin,debounceTime)
+  {}
+
+  void setRGB(uint8_t r, uint8_t g, uint8_t b){
+    analogWrite(m_r_pin, 255-r);
+    analogWrite(m_g_pin, 255-g);
+    analogWrite(m_b_pin, 255-b);
+  }
+
+  void setup(){
+    pinMode(m_sw_pin, INPUT_PULLUP);
+    pinMode(m_r_pin, OUTPUT);
+    pinMode(m_g_pin, OUTPUT);
+    pinMode(m_b_pin, OUTPUT);
+    setRGB(255,0,180);
+  }
+
+  const int m_sw_pin;
+  const int m_r_pin;
+  const int m_g_pin;
+  const int m_b_pin;
+  Bounce bounce;
+};
+
+
+LEDButton startButton (17,18,false);
+LEDButton chargeButton(20,22,false);
+LEDButton useButton   (21,23,false);
+RGBButton fillButton  (16,14,15,19);
+
+
 
 // Analog Input Variables
 elapsedMillis analogReadMillis;
 unsigned long analogReadInterval = 31;
-const uint8_t airSpeedPIN = 14;
+const uint8_t airSpeedPIN = 24;
 int lastAirSpeed = 0;
 
 // Output for lights in city
@@ -219,7 +304,7 @@ struct CityLight {
   float lastTimeOfDay = 0.0f;
 };
 
-#define NUM_cityLights 15
+#define NUM_cityLights 12
 CityLight cityLights[NUM_cityLights] = {
   CityLight( 0, 255, false, 9.00, 19.00),    // Bygning hvor varmen går ind
   CityLight( 1, 255, false, 8.00, 23.95),    // Hvid etage bolig midt højre
@@ -233,9 +318,9 @@ CityLight cityLights[NUM_cityLights] = {
   CityLight(10, 255, false, 7.70, 16.66),    // Rådhus
   CityLight(11, 255, false, 7.75, 15.90),   // Lille Skole
   CityLight(12, 255, false, 6.90, 23.30),   // Vinkel Byhus / Erhverv
-  CityLight(24, 255, false, 6.00, 22.0),    // Sort / Hvid Villa
-  CityLight(25, 255, false, 6.50, 22.8),  // Stor etage bolig bag rådhus
-  CityLight(28, 255, true , 7.80,  2.0),    // Moderne hvid firkant bolig
+  // CityLight(24, 255, false, 6.00, 22.0),    // Sort / Hvid Villa
+  // CityLight(25, 255, false, 6.50, 22.8),  // Stor etage bolig bag rådhus
+  // CityLight(28, 255, true , 7.80,  2.0),    // Moderne hvid firkant bolig
 };
 
 
@@ -262,15 +347,12 @@ void setup() {
 
     // Setup Buttons
     Serial.print("Setting up IO channels");
-    for(int i=0; i<NUM_BUTTONS; i++){
-      pinMode(buttonPINS[i], INPUT_PULLUP);
-    }
-    
-    pinMode(elActiveLedPIN       , OUTPUT);
-    pinMode(heatActiveLedPIN     , OUTPUT);
-    digitalWrite(elActiveLedPIN  , HIGH  );
-    digitalWrite(heatActiveLedPIN, HIGH  );
+    startButton .setup();
+    chargeButton.setup();
+    useButton   .setup();
+    fillButton  .setup();
 
+    // Setup CityLithts
     for(int i=0; i<NUM_cityLights; i++){
       pinMode(cityLights[i].pin, OUTPUT);
       analogWrite(cityLights[i].pin, 0);
@@ -296,11 +378,11 @@ void setup() {
     Serial.println("....done");
 
     Serial.print("Test NeoPixel Strips - ColorWipe");
-    colorWipe(Adafruit_NeoPixel::Color(255,   0,   0)     , 1); // Red
-    // colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 1); // Green
-    // colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 1); // Blue
-    // colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 1); // White
-    colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 1); // Black
+    colorWipe(Adafruit_NeoPixel::Color(255,   0,   0)     , 2); // Red
+    // colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 2); // Green
+    // colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 2); // Blue
+    // colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 2); // White
+    colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 2); // Black
     Serial.println("....done");
 
 
@@ -418,15 +500,17 @@ bool loopButtons(){
     if(buttonReadMillis > buttonReadInterval){
 
       // Update Buttons
-      for(int i=0; i<NUM_BUTTONS; i++){
-          bounceButtons[i].update();
-      };
+      startButton .bounce.update();
+      chargeButton.bounce.update();
+      useButton   .bounce.update();
+      fillButton  .bounce.update();
 
-      if(bounceButtons[StartGame].fallingEdge()){
+
+      if(startButton.bounce.fallingEdge()){
           startButtonElapsed = 0;
           activity = true;
       }
-      else if(bounceButtons[StartGame].risingEdge()){
+      else if(startButton.bounce.risingEdge()){
           if(startButtonElapsed < 2000){
             sendAirSpeed();
             sendCmd("StartButton");
@@ -437,18 +521,20 @@ bool loopButtons(){
           }
           activity = true;
       }
-      if(bounceButtons[FillOven].fallingEdge()){
+      if(fillButton.bounce.fallingEdge()){
           sendCmd("FillButton");
           activity = true;
       }
-      if(bounceButtons[UseSilo].fallingEdge()){
-          sendCmd("ElButton");
-          elActive = !elActive;
+      if(useButton.bounce.fallingEdge()){
+          sendCmd("UseButton");
+          useButton.toggle();
+          // elActive = !elActive;
           activity = true;
       }
-      if(bounceButtons[ChargeSilo].fallingEdge()){
-          sendCmd("HeatButton");
-          heatActive = !heatActive;
+      if(chargeButton.bounce.fallingEdge()){
+          sendCmd("ChargeButton");
+          chargeButton.toggle();
+          // heatActive = !heatActive;
           activity = true;
       }
       bool productionOk = productionPercent >= 1.0f;
@@ -457,10 +543,6 @@ bool loopButtons(){
 
       elFilter  .process(elAmount);
       heatFilter.process(heatAmount);
-
-      digitalWriteFast(elActiveLedPIN  , elActive  );
-      digitalWriteFast(heatActiveLedPIN, heatActive);
-
 
       buttonReadMillis = 0;
     }
@@ -488,7 +570,7 @@ bool loopAnalog(){
         if(airSpeed != lastAirSpeed){
             lastAirSpeed = airSpeed;
             int airSpeedMidi = airSpeed/8;
-            oscAirSpeed = 1.0 - (airSpeedMidi / 127.);
+            oscAirSpeed = (airSpeedMidi / 128.);
             sendAirSpeed();
             activity = true;
             Serial.print("Air: ");
@@ -522,6 +604,11 @@ void ovenPixelLoop(){
     }
   }
   strip1.show();
+
+  if(amountInStorage) fillButton.setRGB(255,  0, 180);
+  else                fillButton.setRGB(  0,  0,   0);
+
+  startButton.setLED(gameRunning);
 }
 
 void siloPixelLoop(){
@@ -553,8 +640,8 @@ void heatPixelLoop(){
     a = pulse_vec[(i-counter)%PULSELEN];
     color = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
     
-    if(!charge_silo && i < 11) color = 0;
-    else if(!use_silo && i >= 11 && i < 14) color = 0;
+    if(!chargeButton.getValue() && i < 11) color = 0;
+    else if(!useButton.getValue() && i >= 11 && i < 14) color = 0;
 
     strip6.setPixelColor(i, color);
   }
@@ -574,17 +661,6 @@ void pixelLoop(){
     ovenPixelLoop();
     siloPixelLoop();
     heatPixelLoop();
-    // for(int i=0; i<strip6.numPixels(); i++){
-    //   float h = heatFilter.value;
-    //   float speed = 0.1;
-    //   float a = abs(cos(2 * M_PI * i/strip6.numPixels() - counter * speed ));
-    //   a = a*a*a*a*a*a*255;
-    //   uint32_t hotColor  = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
-    //   // uint32_t coldColor = Adafruit_NeoPixel::Color(0,0,a);
-    //   strip6.setPixelColor(i, hotColor);
-    //   // strip6.setPixelColor(strip6.numPixels()-1-i,coldColor);
-    // }
-    // strip6.show();
     
     if(vind > 0){
       analogWrite(windmill_PIN, 15+windmill_speed*vind/vind_max);
@@ -665,7 +741,6 @@ void setBarLed(Adafruit_NeoPixel& strip, int offset, int numPixels, float value,
   if(show) strip.show();                          
 }
 
-
 void oscElData(OSCMessage& msg){
   // Serial.print("ElData Received, Size: ");
   // Serial.print(msg.size());
@@ -682,7 +757,7 @@ void oscElData(OSCMessage& msg){
   if(msg.isFloat(4)) amountInStorage = msg.getFloat(4);
   if(msg.isFloat(5)) production      = msg.getFloat(5);
   if(msg.isFloat(6)) productionMin   = msg.getFloat(6);
-  if(msg.isFloat(7)) timeOfDay       = msg.getFloat(7);
+  if(msg.isInt(7)) gameRunning         = msg.getInt(7);
 
   Serial.print("Vind: ");            Serial.println(vind);
   Serial.print("Sol: ");             Serial.println(sol);
@@ -691,7 +766,7 @@ void oscElData(OSCMessage& msg){
   Serial.print("amountInStorage: "); Serial.println(amountInStorage);
   Serial.print("production: ");      Serial.println(production);
   Serial.print("productionMin: ");   Serial.println(productionMin);
-  Serial.print("timeOfDay: ");       Serial.println(timeOfDay);
+  Serial.print("gameRunning: ");         Serial.println(gameRunning);
   productionPercent = production / productionMin;
   if(productionPercent > 1.0f) productionPercent = 1.0f;
 

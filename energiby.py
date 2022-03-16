@@ -85,7 +85,7 @@ b_values = []
 v_values = []
 s_values = []
 index = 0
-run = False
+run = 0
 t = 0
 td = 0
 
@@ -256,6 +256,9 @@ l,  = ax1.plot(x_values,y_values,'k-', label="Samlet Produktion") # Create a lin
 
 ax1.legend(loc='upper left')
 
+def sendElData():
+    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value, oven_amount, storage_amount, production_value, need_min_vector[index], run])
+
 def updatePlot():
     l.set_xdata(x_values)
     l.set_ydata(y_values)
@@ -265,7 +268,7 @@ def updatePlot():
     lv.set_ydata(v_values)
     ls.set_xdata(x_values)
     ls.set_ydata(s_values)
-    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value, oven_amount, storage_amount, production_value, need_min_vector[index]])
+    sendElData()
 
 
 def clear():
@@ -295,7 +298,7 @@ def clear():
 # Animate Function for the plotting
 def animate(i):
     global index, run, t, td, steps
-    if run:
+    if run > 0:
         t = index * 0.1
         td = timeOfDay(t)
         y = production(index)
@@ -304,11 +307,12 @@ def animate(i):
         b_values.append(bio_value)
         v_values.append(vind_vector[index])
         s_values.append(sol_vector[index])
-        updatePlot()        
-        index = index+1
         if t >= 48.0:
-            run = run = False
+            run = 0
             print("Consumption {0}".format(index))
+
+        updatePlot()     
+        index = index+1
 
     time.sleep(.02)
 
@@ -326,13 +330,13 @@ def oscCmd(addr, value):
     if value == 'clear':
         clear()
     elif value == 'run':
-        run = True
+        run = 1
     elif value == 'stop':
-        run = False
+        run = 0
     elif value == 'StartButton':
-        run = False
+        run = 0
         clear()
-        run = True
+        run = 1
     elif value == 'FillButton':
         fillOven()
         
@@ -363,7 +367,6 @@ oscThread = Thread(target = server.serve_forever)
 oscThread.start()
 
 clear()
-run = True #TODO Remove This Line!!
 
 # Start the Animation Funtion
 ani = FuncAnimation(fig, animate, interval = 10)
