@@ -14,7 +14,7 @@ elapsedMillis ledOnMillis;
 // NeoPixel Led Strips
 #define NUM_NEOPIXEL_STRIPS 7
 const unsigned char NeoPixelPin[NUM_NEOPIXEL_STRIPS]   = {26, 33, 36, 35, 37, 38 , 27};
-const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 30, 42,  2, 166, 200};
+const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 30, 42,  2, 166, 173};
 Adafruit_NeoPixel strip1(NeoPixelCount[0], NeoPixelPin[0], NEO_GRB + NEO_KHZ800); // 1 - PIN 26: 8x8  Matrix
 Adafruit_NeoPixel strip2(NeoPixelCount[1], NeoPixelPin[1], NEO_GRB + NEO_KHZ800); // 2 - PIN 33: 3x26 Left Side
 Adafruit_NeoPixel strip3(NeoPixelCount[2], NeoPixelPin[2], NEO_GRB + NEO_KHZ800); // 3 - PIN 36: 2x15 Silo ControlPanel
@@ -76,16 +76,7 @@ auto& silo_panel_strip         = strip3;
 auto& silo_strip               = strip7;
 bool charge_silo = true;
 bool use_silo    = true;
-float silo_available_power     = 18.0f; // MW
-float silo_available_power_max = 18.0f; // MW
-
-// City Heat
-int getHeatStripIndex(int i){
-
-
-
-}
-
+float silo_available_pct     = 0.8f; // MW
 
 
 auto& city_power_status_strip = strip5;
@@ -309,7 +300,7 @@ void setup() {
     // colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 1); // Green
     // colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 1); // Blue
     // colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 1); // White
-    // colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 1); // Black
+    colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 1); // Black
     Serial.println("....done");
 
 
@@ -534,10 +525,19 @@ void ovenPixelLoop(){
 }
 
 void siloPixelLoop(){
-      float amountPct = silo_available_power/silo_available_power_max;
-      setBarLed(silo_panel_strip, 0 , 15, amountPct, 255, 0, 0, false);
-      setBarLed(silo_panel_strip, 15, 15, amountPct, 255, 0, 0, true );
-      setBarLed(silo_strip      , 0, silo_strip.numPixels(),amountPct, 255, 0,0,true );
+  setBarLed(silo_panel_strip, 0 , 15, silo_available_pct, 255, 0, 0, false);
+  setBarLed(silo_panel_strip, 15, 15, silo_available_pct, 255, 0, 0, true );
+  // setBarLed(silo_strip      , 0, silo_strip.numPixels(),silo_available_pct, 255, 0,0,true );
+
+  uint32_t color;
+  for(int i=0; i<silo_strip.numPixels(); i++){
+    float pct = 1.0 - static_cast<float>(i)/static_cast<float>(silo_strip.numPixels());
+    color = silo_available_pct < pct ? Adafruit_NeoPixel::Color(0,0,255) : Adafruit_NeoPixel::Color(255,0,0);  
+    silo_strip.setPixelColor(i, color);
+  }
+
+  // Show the strip
+  silo_strip.show();
 }
 
 void heatPixelLoop(){
@@ -553,6 +553,9 @@ void heatPixelLoop(){
     a = pulse_vec[(i-counter)%PULSELEN];
     color = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
     
+    if(!charge_silo && i < 11) color = 0;
+    else if(!use_silo && i >= 11 && i < 14) color = 0;
+
     strip6.setPixelColor(i, color);
   }
   
