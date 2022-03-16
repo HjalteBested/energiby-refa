@@ -12,24 +12,29 @@
 elapsedMillis ledOnMillis;
 
 // NeoPixel Led Strips
-#define NUM_NEOPIXEL_STRIPS 6
-const unsigned char NeoPixelPin[NUM_NEOPIXEL_STRIPS]   = {26, 33, 36, 35, 37, 38 };
-const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 30, 42,  2, 120};
+#define NUM_NEOPIXEL_STRIPS 7
+const unsigned char NeoPixelPin[NUM_NEOPIXEL_STRIPS]   = {26, 33, 36, 35, 37, 38 , 27};
+const unsigned char NeoPixelCount[NUM_NEOPIXEL_STRIPS] = {64, 78, 30, 42,  2, 166, 200};
 Adafruit_NeoPixel strip1(NeoPixelCount[0], NeoPixelPin[0], NEO_GRB + NEO_KHZ800); // 1 - PIN 26: 8x8  Matrix
 Adafruit_NeoPixel strip2(NeoPixelCount[1], NeoPixelPin[1], NEO_GRB + NEO_KHZ800); // 2 - PIN 33: 3x26 Left Side
-Adafruit_NeoPixel strip3(NeoPixelCount[2], NeoPixelPin[2], NEO_GRB + NEO_KHZ800); // 3 - PIN 36: 2x15 Silo
+Adafruit_NeoPixel strip3(NeoPixelCount[2], NeoPixelPin[2], NEO_GRB + NEO_KHZ800); // 3 - PIN 36: 2x15 Silo ControlPanel
 Adafruit_NeoPixel strip4(NeoPixelCount[3], NeoPixelPin[3], NEO_GRB + NEO_KHZ800); // 4 - PIN 35: 3x14 Vind, Sol, Affald
-Adafruit_NeoPixel strip5(NeoPixelCount[4], NeoPixelPin[4], NEO_RGB + NEO_KHZ800); // 5 - PIN 37: 2x1  Silo Routing LEDs
+Adafruit_NeoPixel strip5(NeoPixelCount[4], NeoPixelPin[4], NEO_RGB + NEO_KHZ800); // 5 - PIN 37: 2x1 Led -- Byen mangler fjernvarme, Byen mangler strøm
 Adafruit_NeoPixel strip6(NeoPixelCount[5], NeoPixelPin[5], NEO_GRB + NEO_KHZ800); // 6 - PIN 38: Varme i Vejen
+Adafruit_NeoPixel strip7(NeoPixelCount[6], NeoPixelPin[6], NEO_GRB + NEO_KHZ800); // 7 - PIN 27: Silo Inside Strip
 
-Adafruit_NeoPixel* strips[NUM_NEOPIXEL_STRIPS] = {&strip1, &strip2, &strip3, &strip4, &strip5, &strip6};
+Adafruit_NeoPixel* strips[NUM_NEOPIXEL_STRIPS] = {&strip1, &strip2, &strip3, &strip4, &strip5, &strip6, &strip7};
 
 elapsedMillis pixelUpdateMillis;
-unsigned long pixelUpdateInterval = 37;
+unsigned long pixelUpdateInterval = 39;
+
+#define PULSELEN 30
+int pulse_vec[PULSELEN] = {15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 30, 45, 80, 115, 150, 185, 220, 255};
+
+
 
 // Vind Variables
-auto& vind_strip = strip4
-;
+auto& vind_strip = strip4;
 float vind = 0.0f;
 float vind_max = 35.0f;
 float vind_numPixels = 14;
@@ -66,7 +71,28 @@ float production = 1.0;
 float productionMin = 1.0f;
 float productionPercent = 1.0f;
 
+// Silo Variables
+auto& silo_panel_strip         = strip3;
+auto& silo_strip               = strip7;
+bool charge_silo = true;
+bool use_silo    = true;
+float silo_available_power     = 18.0f; // MW
+float silo_available_power_max = 18.0f; // MW
 
+// City Heat
+int getHeatStripIndex(int i){
+
+
+
+}
+
+
+
+auto& city_power_status_strip = strip5;
+bool city_missing_heat = true;
+bool city_missing_electricity = true;
+
+// 
 const uint8_t elActiveLedPIN = 23;
 const uint8_t heatActiveLedPIN = 22;
 bool elActive = true;
@@ -82,12 +108,27 @@ struct OnePole {
   float value;
   float in;
 
+  void  setValue(float v){ 
+    value = v; 
+  }
+
+  float getValue(){ 
+    return value; 
+  }
+
   float process(float aIn){
     in = aIn;
     value = in*alpha + value*(1.0-alpha);
     return value;
   }
+
 };
+
+inline int wrap(int i, int N){
+  while(i >= N) i -= N;
+  while(i < 0 ) i += N;
+  return i;
+}
 
 OnePole elFilter  (0.02 ,1.0);
 OnePole heatFilter(0.01 ,1.0);
@@ -115,7 +156,7 @@ EthernetUDP Udp;
 // ----------------------------------------- //
 const unsigned int localPort = 7134;         // local port to listen for OSC packets (actually not used for sending)
 
-const IPAddress PiIp(192,168,1,101);        // remote IP of your computer
+const IPAddress PiIp(192,168,1,100);        // remote IP of your computer
 const unsigned int PiPort   = 7133;         // remote port to receive OSC
 
 const IPAddress BroadCastIp(255,255,255,255);     // remote IP of your computer
@@ -137,14 +178,14 @@ const byte buttonPINS[NUM_BUTTONS]   = {15, 16, 17, 18};
 // --- Bounce the Button's --->
 const int debounceTime = 20;
 Bounce bounceButtons[] = {
-  Bounce(buttonPINS[0], debounceTime),
-  Bounce(buttonPINS[1], debounceTime),
-  Bounce(buttonPINS[2], debounceTime),
-  Bounce(buttonPINS[3], debounceTime),
+  Bounce(buttonPINS[0], debounceTime), // 15: FillOven
+  Bounce(buttonPINS[1], debounceTime), // 16: StartGame
+  Bounce(buttonPINS[2], debounceTime), // 17: ChargeSilo
+  Bounce(buttonPINS[3], debounceTime), // 18: UseSilo
 };
 
 enum buttonEnum {
-  FillOven, StartGame, HeatActive, ElActive
+  FillOven, StartGame, ChargeSilo, UseSilo
 };
 
 elapsedMillis buttonReadMillis;
@@ -234,10 +275,10 @@ void setup() {
       pinMode(buttonPINS[i], INPUT_PULLUP);
     }
     
-    pinMode(elActiveLedPIN  , OUTPUT);
-    pinMode(heatActiveLedPIN, OUTPUT);
-    digitalWrite(elActiveLedPIN  , HIGH);
-    digitalWrite(heatActiveLedPIN, HIGH);
+    pinMode(elActiveLedPIN       , OUTPUT);
+    pinMode(heatActiveLedPIN     , OUTPUT);
+    digitalWrite(elActiveLedPIN  , HIGH  );
+    digitalWrite(heatActiveLedPIN, HIGH  );
 
     for(int i=0; i<NUM_cityLights; i++){
       pinMode(cityLights[i].pin, OUTPUT);
@@ -258,14 +299,17 @@ void setup() {
       strips[i]->show();
       strips[i]->setBrightness(50);
     }
+    strip5.setBrightness(255);
+    strip6.setBrightness(255);
+    strip7.setBrightness(255);
     Serial.println("....done");
 
     Serial.print("Test NeoPixel Strips - ColorWipe");
-    colorWipe(Adafruit_NeoPixel::Color(255,   0,   0)     , 2); // Red
-    colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 2); // Green
-    colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 2); // Blue
-    colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 2); // White
-    colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 2); // Blue
+    colorWipe(Adafruit_NeoPixel::Color(255,   0,   0)     , 1); // Red
+    // colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 1); // Green
+    // colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 1); // Blue
+    // colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 1); // White
+    // colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 1); // Black
     Serial.println("....done");
 
 
@@ -291,8 +335,7 @@ void setup() {
 
     digitalWrite(LED_BUILTIN, 0);    // turn *off* led
 
-    strip5.setBrightness(255);
-    strip6.setBrightness(255);
+
 
     reset();
 
@@ -407,12 +450,12 @@ bool loopButtons(){
           sendCmd("FillButton");
           activity = true;
       }
-      if(bounceButtons[ElActive].fallingEdge()){
+      if(bounceButtons[UseSilo].fallingEdge()){
           sendCmd("ElButton");
           elActive = !elActive;
           activity = true;
       }
-      if(bounceButtons[HeatActive].fallingEdge()){
+      if(bounceButtons[ChargeSilo].fallingEdge()){
           sendCmd("HeatButton");
           heatActive = !heatActive;
           activity = true;
@@ -470,10 +513,10 @@ void ovenPixelLoop(){
     if(i < amountInOven){
       uint32_t color = Adafruit_NeoPixel::Color(255,0,0);
       if(i > amountInOven_ok_min && i < amountInOven_ok_max) color = Adafruit_NeoPixel::Color(0,255,0);
-      strip2.setPixelColor(25-i, color);
+      strip2.setPixelColor(i, color);
     }
     else {
-      strip2.setPixelColor(25-i, 0);
+      strip2.setPixelColor(i, 0);
     }
   }
   strip2.show();
@@ -490,27 +533,55 @@ void ovenPixelLoop(){
   strip1.show();
 }
 
-void pixelLoop(){
+void siloPixelLoop(){
+      float amountPct = silo_available_power/silo_available_power_max;
+      setBarLed(silo_panel_strip, 0 , 15, amountPct, 255, 0, 0, false);
+      setBarLed(silo_panel_strip, 15, 15, amountPct, 255, 0, 0, true );
+      setBarLed(silo_strip      , 0, silo_strip.numPixels(),amountPct, 255, 0,0,true );
+}
+
+void heatPixelLoop(){
   static unsigned long counter = 0;
+  float h = heatFilter.value;
+  auto N = strip6.numPixels();
+  float a_min = 1;
+  float a = a_min;
+
+  for(int i=0; i<N; i++){
+    uint32_t color = Adafruit_NeoPixel::Color(a_min*h,0,a_min*(1.0-h));
+
+    a = pulse_vec[(i-counter)%PULSELEN];
+    color = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
+    
+    strip6.setPixelColor(i, color);
+  }
+  
+
+  counter++;
+  strip6.show();  
+}
+
+void pixelLoop(){
   if(pixelUpdateMillis > pixelUpdateInterval){
-    setBarLed(vind_strip,vind_pixelOffset,vind_numPixels,vind/vind_max,0,0,255,true);
+    setBarLed(vind_strip,vind_pixelOffset,vind_numPixels,vind/vind_max,0,0,255,false);
     setBarLed(sol_strip ,sol_pixelOffset ,sol_numPixels ,sol/sol_max  ,255,100,0,false);
     setBarLed(bio_strip ,bio_pixelOffset ,bio_numPixels ,bio/bio_max  ,0,255,0,true);
     setBarLed(strip2, 26, 26, oscAirSpeed, 0  , 100, 255, false);
     setBarLed(strip2, 52, 26, bio/bio_max, 200,  55,   0, false );
     ovenPixelLoop();
-    for(int i=0; i<strip5.numPixels(); i++){
-      float h = heatFilter.value;
-      float speed = 0.1;
-      float a = abs(cos(2 * M_PI * i/strip5.numPixels() - counter * speed ));
-      a = a*a*a*255;
-      uint32_t hotColor  = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
-      uint32_t coldColor = Adafruit_NeoPixel::Color(0,0,a);
-      strip5.setPixelColor(i, hotColor);
-      strip6.setPixelColor(strip6.numPixels()-1-i,coldColor);
-    }
-    strip5.show();
-    strip6.show();
+    siloPixelLoop();
+    heatPixelLoop();
+    // for(int i=0; i<strip6.numPixels(); i++){
+    //   float h = heatFilter.value;
+    //   float speed = 0.1;
+    //   float a = abs(cos(2 * M_PI * i/strip6.numPixels() - counter * speed ));
+    //   a = a*a*a*a*a*a*255;
+    //   uint32_t hotColor  = Adafruit_NeoPixel::Color(a*h,0,a*(1.0-h));
+    //   // uint32_t coldColor = Adafruit_NeoPixel::Color(0,0,a);
+    //   strip6.setPixelColor(i, hotColor);
+    //   // strip6.setPixelColor(strip6.numPixels()-1-i,coldColor);
+    // }
+    // strip6.show();
     
     if(vind > 0){
       analogWrite(windmill_PIN, 15+windmill_speed*vind/vind_max);
@@ -521,8 +592,13 @@ void pixelLoop(){
 
 
     pixelUpdateMillis = 0;
-    counter++;
   }
+}
+
+void cityStatusLoop(){
+  city_power_status_strip.setPixelColor(0, city_missing_heat        ? 255 : 0, 0, 0);
+  city_power_status_strip.setPixelColor(1, city_missing_electricity ? 255 : 0, 0, 0);
+  city_power_status_strip.show();
 }
 
 void cityLightsLoop(){
@@ -554,8 +630,13 @@ void loop(){
 
   if(!oscActivity){
     pixelLoop();
+    cityStatusLoop();
     cityLightsLoop();
+
+
   }
+
+
 
   // blink the LED when any activity has happened
   if(activity){
@@ -574,9 +655,9 @@ void setBarLed(Adafruit_NeoPixel& strip, int offset, int numPixels, float value,
   float scale = numOn-numFullOn;
 
   for(int i=0; i<numPixels; i++) { 
-    if(i < numFullOn) strip.setPixelColor(offset+numPixels-1-i, Adafruit_NeoPixel::Color(r,g,b));         
-    else if (i < ceil(numOn)) strip.setPixelColor(offset+numPixels-1-i, Adafruit_NeoPixel::Color(r*scale,g*scale,b*scale));         
-    else strip.setPixelColor(offset+numPixels-1-i,0);   
+    if(i < numFullOn) strip.setPixelColor(offset+i, Adafruit_NeoPixel::Color(r,g,b));         
+    else if (i < ceil(numOn)) strip.setPixelColor(offset+i, Adafruit_NeoPixel::Color(r*scale,g*scale,b*scale));         
+    else strip.setPixelColor(offset+i,0);   
   }
   if(show) strip.show();                          
 }

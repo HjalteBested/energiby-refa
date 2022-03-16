@@ -20,7 +20,7 @@ import json
 plt.rcParams['toolbar'] = 'None'
 
 
-oscSenderTeensy = udp_client.SimpleUDPClient("192.168.1.34",7134)
+oscSenderTeensy = udp_client.SimpleUDPClient("192.168.1.102",7134)
 
 # Variables used for the live plot
 global x_values, y_values, bio_raw, index, run, t, td
@@ -363,6 +363,7 @@ oscThread = Thread(target = server.serve_forever)
 oscThread.start()
 
 clear()
+run = True #TODO Remove This Line!!
 
 # Start the Animation Funtion
 ani = FuncAnimation(fig, animate, interval = 10)
