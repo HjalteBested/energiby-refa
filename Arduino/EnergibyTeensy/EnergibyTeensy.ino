@@ -169,7 +169,7 @@ EthernetUDP Udp;
 // ----------------------------------------- //
 const unsigned int localPort = 7134;         // local port to listen for OSC packets (actually not used for sending)
 
-const IPAddress PiIp(192,168,1,103);        // remote IP of your computer
+const IPAddress PiIp(192,168,0,103);        // remote IP of your computer
 const unsigned int PiPort   = 7133;         // remote port to receive OSC
 
 const IPAddress BroadCastIp(255,255,255,255);     // remote IP of your computer

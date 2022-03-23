@@ -20,7 +20,7 @@ import json
 plt.rcParams['toolbar'] = 'None'
 
 
-oscSenderTeensy = udp_client.SimpleUDPClient("192.168.1.102",7134)
+oscSenderTeensy = udp_client.SimpleUDPClient("192.168.0.102",7134)
 
 # Variables used for the live plot
 global x_values, y_values, bio_raw, index, run, t, td
@@ -28,55 +28,47 @@ global x_values, y_values, bio_raw, index, run, t, td
 # Data about the electrical system
 el_mul = 0.01
 el_t      = np.linspace(0,48,49,True)
-el_210129 = [3865., 3864., 3823., 3848., 3937., 4123, 4534, 5147, 5377, 5385, 5389, 5368, 5223, 5094, 5134, 4963, 5040, 5498, 5366, 4941, 4586, 4312, 4099, 3869]
-el_210129 = el_210129+el_210129
-el_210129.append(el_210129[0])
-el_210129 = np.array(el_210129) * el_mul
 
+# TIME       0     1     2     3     4     5     6     7     8     9     10    11    12    13    14    15    16    17    18    19    20    21    22    23    24 
+mw_needed = [24.0, 26.0, 27.0, 28.5, 32.5, 37.0, 41.0, 43.0, 40.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 16.0, 20.0,
+             22.0, 25.0, 27.0, 29.0, 33.0, 38.0, 42.0, 41.0, 40.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 18.0, 20.0, 24.0]
+mw_needed = np.array(mw_needed) + 5
+print(mw_needed)
 
 time_vector = np.zeros(481)
 need_vector = np.zeros(481)
 need_min_vector = np.zeros(481)
 need_max_vector = np.zeros(481)
 
-lastNeed = el_210129[0]
+lastNeed = mw_needed[0]
 
 for x in range(481):
     t = x / 10.0
-    alpha = 0.15
-    lastNeed = np.interp(t, el_t, el_210129)*alpha + lastNeed*(1.0-alpha)
+    alpha = 0.05
+    lastNeed = np.interp(t, el_t, mw_needed)*alpha + lastNeed*(1.0-alpha)
     need_vector[x] = lastNeed
-    need_min_vector[x] = lastNeed - 5
-    need_max_vector[x] = lastNeed + 5
+    need_min_vector[x] = lastNeed - 4
+    need_max_vector[x] = lastNeed + 4
     time_vector[x] = t
 
 
 steps = 0
 firstStep = True
 
-# Add normal distributed create consumption range
-# e1 = np.random.normal(0.1, 0.01, size=el_210129.shape)
-# e2 = np.random.normal(0.1, 0.01, size=el_210129.shape)
+# Add create consumption range
 e1 = 0.1
 e2 = 0.1
-consumption_min = el_210129*(1.0-abs(e1))
-consumption_max = el_210129*(1.0+abs(e2))
+consumption_min = mw_needed*(1.0-abs(e1))
+consumption_max = mw_needed*(1.0+abs(e2))
 
 print(el_t.shape)
-print(el_210129.shape)
+print(mw_needed.shape)
 
 
 def timeOfDay(t):
-    while(t > 24):
-        t -= 24
+    while(t > 24.0):
+        t -= 24.0
     return t
-
-
-#url = 'https://www.energidataservice.dk/proxy/api/datastore_search?resource_id=fixedresidualconsumption&limit=15'
-#fileobj = urllib.request.urlopen(url)
-#jdata = json.loads(fileobj.read())
-#print(jdata)
-
 
 
 x_values = []
@@ -115,6 +107,12 @@ oven_consumption_rate = 0.1
 storage_amount = 64.0
 storage_amount_max = 64.0
 
+# The Silo
+silo_amount_initial = 0.5
+silo_amount = silo_amount_initial
+silo_amount_max = 1.0
+silo_charge = 0
+silo_use = 0
 
 
 def fillOven():
@@ -161,7 +159,7 @@ def makeNewVindParameters():
 
 # Sol generator
 sol_alpha  = 0.1 # Alpha value for 1st order lowpass filter
-sol_max    = 0.07 * el_210129.mean()
+sol_max    = 0.07 * mw_needed.mean()
 sol_v1  = 0.0
 sol_value  = 0.0
 sol_vector = np.zeros(481)
@@ -187,7 +185,7 @@ def makeNewSolVector():
     sol_value = 0
     sol_v1 = sol_value
     for x in range(481):
-        td = timeOfDay(x/10.0)
+        td = timeOfDay(0.1*x)
         sol_vector[x] = sol(td)
 
 
@@ -239,7 +237,7 @@ fig, (ax1) = plt.subplots(nrows=1, ncols=1, figsize=(8, 4))
 plt.subplots_adjust(bottom=0.25)
 fig.set_facecolor('grey')
 ax1.set_xlim([0,48]) # Set the x-limits
-ax1.set_ylim([0,100]) # Set the y-limits
+ax1.set_ylim([0,70]) # Set the y-limits
 ax1.set_xlabel('Time [h]')
 ax1.set_ylabel('Power [MW]')
 ax1.set_xticks([0  ,6  ,12  ,18  ,24 ,30 ,36  ,42  ,48])
@@ -249,23 +247,23 @@ ax1.set_xticklabels(xlabels)
 # Plot the Range as to stay within 
 ax1.fill_between(time_vector, need_min_vector, need_max_vector, label="Behov")
 
-lb, = ax1.plot(x_values,b_values,'g-', label="Biomasse / Affald") # Create a line with the data
-lv, = ax1.plot(x_values,v_values,'b-', label="Vind") # Create a line with the data
-ls, = ax1.plot(x_values,s_values,'r-', label="Sol") # Create a line with the data
-l,  = ax1.plot(x_values,y_values,'k-', label="Samlet Produktion") # Create a line with the data
+#lb, = ax1.plot(x_values,b_values,'g-', label="Biomasse / Affald") # Create a line with the data
+#lv, = ax1.plot(x_values,v_values,'b-', label="Vind") # Create a line with the data
+l,  = ax1.plot(x_values,y_values,'r-', label="Produktion") # Create a line with the data
+ls, = ax1.plot(x_values,s_values,'k-', label="Energi til Net") # Create a line with the data
 
 ax1.legend(loc='upper left')
 
 def sendElData():
-    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value, oven_amount, storage_amount, production_value, need_min_vector[index], run])
+    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value, oven_amount, storage_amount, production_value, need_min_vector[index], run, silo_amount])
 
 def updatePlot():
     l.set_xdata(x_values)
     l.set_ydata(y_values)
-    lb.set_xdata(x_values)
-    lb.set_ydata(b_values)
-    lv.set_xdata(x_values)
-    lv.set_ydata(v_values)
+    #lb.set_xdata(x_values)
+    #lb.set_ydata(b_values)
+    #lv.set_xdata(x_values)
+    #lv.set_ydata(v_values)
     ls.set_xdata(x_values)
     ls.set_ydata(s_values)
     sendElData()
@@ -326,7 +324,7 @@ def oscValue(addr, value):
     print("[{0}] ~ {1}".format(addr, bio_raw))
 
 def oscCmd(addr, value):
-    global x_values, y_values, bio_raw, index, run
+    global x_values, y_values, bio_raw, index, run, silo_charge, silo_use
     if value == 'clear':
         clear()
     elif value == 'run':
@@ -339,6 +337,14 @@ def oscCmd(addr, value):
         run = 1
     elif value == 'FillButton':
         fillOven()
+    elif value == 'ChargeSiloOn':
+        silo_charge = 1
+    elif value == 'ChargeSiloOff':
+        silo_charge = 0
+    elif value == 'UseSiloOn':
+        silo_use = 1
+    elif value == 'UseSiloOff':
+        silo_use = 0
         
     print("[{0}] ~ {1}".format(addr, value))
 
