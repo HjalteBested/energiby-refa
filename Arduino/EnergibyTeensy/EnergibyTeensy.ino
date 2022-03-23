@@ -76,7 +76,6 @@ auto& bio_strip = strip4;
 float bio_numPixels = 14;
 int bio_pixelOffset = 28;
 float bio = 0;
-float bio_max = 60.0f;
 
 // Ilt
 auto& ilt_strip = strip2;
@@ -96,9 +95,9 @@ float productionMin = 1.0f;
 float productionPercent = 1.0f;
 
 // Silo Variables
-auto& silo_panel_strip         = strip3;
-auto& silo_strip               = strip7;
-float silo_available_pct     = 0.8f; // MW
+auto& silo_panel_strip       = strip3;
+auto& silo_strip             = strip7;
+float silo_available_pct     = 0.8f;
 
 
 auto& city_power_status_strip = strip5;
@@ -106,8 +105,6 @@ bool city_missing_heat = true;
 bool city_missing_electricity = true;
 
 // 
-const uint8_t elActiveLedPIN = 23;
-const uint8_t heatActiveLedPIN = 22;
 bool elActive = true;
 bool heatActive = true;
 
@@ -204,17 +201,18 @@ struct LEDButton {
     digitalWrite(m_led_pin, value);
   }
 
-  void setValue(bool value){
+  void setValue(bool value, bool set_led=true){
     m_value = value;
-    setLED(m_value);
+    if(set_led) setLED(m_value);
   }
 
   bool getValue(){
     return m_value;
   }
 
-  void toggle(){
-    setValue(!m_value);
+  bool toggle(bool set_led=true){
+    setValue(!m_value,set_led);
+    return m_value;
   }
 
   void setup(){
@@ -418,6 +416,10 @@ void reset(){
   elActive   = true;
   heatActive = true;
   for(int i=0; i<NUM_cityLights; i++) cityLights[i].init();
+
+  startButton .setValue(false);
+  chargeButton.setValue(false);
+  useButton   .setValue(false);
 }
 
 // Fill strip pixels one after another with a color. Strip is NOT cleared
@@ -511,8 +513,10 @@ bool loopButtons(){
           activity = true;
       }
       else if(startButton.bounce.risingEdge()){
+          sendCmd(chargeButton.getValue() ? "ChargeSiloT" : "ChargeSiloF");
+          sendCmd(useButton   .getValue() ? "UseSiloT"    : "UseSiloF"   );
+          sendAirSpeed();
           if(startButtonElapsed < 2000){
-            sendAirSpeed();
             sendCmd("StartButton");
           }
           else {
@@ -526,15 +530,11 @@ bool loopButtons(){
           activity = true;
       }
       if(useButton.bounce.fallingEdge()){
-          sendCmd("UseButton");
-          useButton.toggle();
-          // elActive = !elActive;
+          sendCmd(useButton.toggle() ? "UseSiloT" : "UseSiloF");
           activity = true;
       }
       if(chargeButton.bounce.fallingEdge()){
-          sendCmd("ChargeButton");
-          chargeButton.toggle();
-          // heatActive = !heatActive;
+          sendCmd(chargeButton.toggle() ? "ChargeSiloT" : "ChargeSiloF");
           activity = true;
       }
       bool productionOk = productionPercent >= 1.0f;
@@ -655,9 +655,9 @@ void pixelLoop(){
   if(pixelUpdateMillis > pixelUpdateInterval){
     setBarLed(vind_strip,vind_pixelOffset,vind_numPixels,vind/vind_max,0,0,255,false);
     setBarLed(sol_strip ,sol_pixelOffset ,sol_numPixels ,sol/sol_max  ,255,100,0,false);
-    setBarLed(bio_strip ,bio_pixelOffset ,bio_numPixels ,bio/bio_max  ,0,255,0,true);
+    setBarLed(bio_strip ,bio_pixelOffset ,bio_numPixels ,bio  ,0,255,0,true);
     setBarLed(strip2, 26, 26, oscAirSpeed, 0  , 100, 255, false);
-    setBarLed(strip2, 52, 26, bio/bio_max, 200,  55,   0, false );
+    setBarLed(strip2, 52, 26, bio, 200,  55,   0, false );
     ovenPixelLoop();
     siloPixelLoop();
     heatPixelLoop();
@@ -750,29 +750,35 @@ void oscElData(OSCMessage& msg){
   // }
   // Serial.println();
  
-  if(msg.isFloat(0)) vind = msg.getFloat(0);
-  if(msg.isFloat(1)) sol  = msg.getFloat(1);
-  if(msg.isFloat(2)) bio  = msg.getFloat(2);
-  if(msg.isFloat(3)) amountInOven    = msg.getFloat(3);
-  if(msg.isFloat(4)) amountInStorage = msg.getFloat(4);
-  if(msg.isFloat(5)) production      = msg.getFloat(5);
-  if(msg.isFloat(6)) productionMin   = msg.getFloat(6);
-  if(msg.isInt(7)) gameRunning         = msg.getInt(7);
+  if(msg.isFloat(0)) vind               = msg.getFloat(0);
+  if(msg.isFloat(1)) sol                = msg.getFloat(1);
+  if(msg.isFloat(2)) bio                = msg.getFloat(2);
+  if(msg.isFloat(3)) amountInOven       = msg.getFloat(3);
+  if(msg.isFloat(4)) amountInStorage    = msg.getFloat(4);
+  if(msg.isFloat(5)) production         = msg.getFloat(5);
+  if(msg.isFloat(6)) productionMin      = msg.getFloat(6);
+  if(msg.isInt  (7)) gameRunning        = msg.getInt  (7);
+  if(msg.isFloat(8)) silo_available_pct = msg.getFloat(8);
 
-  Serial.print("Vind: ");            Serial.println(vind);
-  Serial.print("Sol: ");             Serial.println(sol);
-  Serial.print("Bio: ");             Serial.println(bio);
-  Serial.print("amountInOven: ");    Serial.println(amountInOven);
-  Serial.print("amountInStorage: "); Serial.println(amountInStorage);
-  Serial.print("production: ");      Serial.println(production);
-  Serial.print("productionMin: ");   Serial.println(productionMin);
-  Serial.print("gameRunning: ");         Serial.println(gameRunning);
+  Serial.print("Vind: ");               Serial.println(vind);
+  Serial.print("Sol: ");                Serial.println(sol);
+  Serial.print("Bio: ");                Serial.println(bio);
+  Serial.print("amountInOven: ");       Serial.println(amountInOven);
+  Serial.print("amountInStorage: ");    Serial.println(amountInStorage);
+  Serial.print("production: ");         Serial.println(production);
+  Serial.print("productionMin: ");      Serial.println(productionMin);
+  Serial.print("gameRunning: ");        Serial.println(gameRunning);
+  Serial.print("silo_available_pct: "); Serial.println(silo_available_pct);
+
   productionPercent = production / productionMin;
   if(productionPercent > 1.0f) productionPercent = 1.0f;
+}
 
-
+void oscReset(OSCMessage& msg){
 
 }
+ 
+
  
 
 void oscLed(OSCMessage& msg, int addr_offset){

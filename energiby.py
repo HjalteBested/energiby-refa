@@ -26,12 +26,11 @@ oscSenderTeensy = udp_client.SimpleUDPClient("192.168.0.102",7134)
 global x_values, y_values, bio_raw, index, run, t, td
 
 # Data about the electrical system
-el_mul = 0.01
-el_t      = np.linspace(0,48,49,True)
+hours_vector = np.linspace(0,48,49,True)
 
 # TIME       0     1     2     3     4     5     6     7     8     9     10    11    12    13    14    15    16    17    18    19    20    21    22    23    24 
-mw_needed = [24.0, 26.0, 27.0, 28.5, 32.5, 37.0, 41.0, 43.0, 40.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 16.0, 20.0,
-             22.0, 25.0, 27.0, 29.0, 33.0, 38.0, 42.0, 41.0, 40.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 18.0, 20.0, 24.0]
+mw_needed = [24.0, 26.0, 27.0, 28.5, 32.5, 37.0, 39.0, 41.0, 40.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 16.0, 20.0,
+             22.0, 25.0, 27.0, 29.0, 33.0, 38.0, 40.0, 40.0, 39.0, 37.0, 32.0, 27.0, 21.0, 17.0, 16.0, 12.0, 18.0, 23.0, 29.0, 32.0, 26.0, 20.0, 18.0, 20.0, 24.0]
 mw_needed = np.array(mw_needed) + 5
 print(mw_needed)
 
@@ -43,12 +42,12 @@ need_max_vector = np.zeros(481)
 lastNeed = mw_needed[0]
 
 for x in range(481):
-    t = x / 10.0
+    t = 0.1 * x
     alpha = 0.05
-    lastNeed = np.interp(t, el_t, mw_needed)*alpha + lastNeed*(1.0-alpha)
+    lastNeed = np.interp(t, hours_vector, mw_needed)*alpha + lastNeed*(1.0-alpha)
     need_vector[x] = lastNeed
-    need_min_vector[x] = lastNeed - 4
-    need_max_vector[x] = lastNeed + 4
+    need_min_vector[x] = lastNeed - 5
+    need_max_vector[x] = lastNeed + 5
     time_vector[x] = t
 
 
@@ -56,12 +55,12 @@ steps = 0
 firstStep = True
 
 # Add create consumption range
-e1 = 0.1
-e2 = 0.1
-consumption_min = mw_needed*(1.0-abs(e1))
-consumption_max = mw_needed*(1.0+abs(e2))
+# e1 = 0.1
+# e2 = 0.1
+# consumption_min = mw_needed*(1.0-abs(e1))
+# consumption_max = mw_needed*(1.0+abs(e2))
 
-print(el_t.shape)
+print(hours_vector.shape)
 print(mw_needed.shape)
 
 
@@ -81,20 +80,8 @@ run = 0
 t = 0
 td = 0
 
-# Vind generator
-vind_n      = 0
-vind_N      = 15
-vind_mean   = 2000 * el_mul
-vind_sd     = 1500 * el_mul
-vind_alpha  = 0.01 # Alpha value for 1st order lowpass filter
-vind_a1     = 0.1  # 
-vind_v1     = vind_mean
-vind_value  = vind_mean
-vind_tmp    = vind_mean
-vind_vector = np.zeros(481)
-
 production_alpha = 0.9 # Alpha value for 1st order lowpass filter
-production_value = vind_mean
+production_value = need_vector[0]
 
 oven_amount_initial = 13.0
 oven_amount = oven_amount_initial
@@ -102,17 +89,13 @@ oven_amount_max = 26.0
 oven_amount_ok_min = 8.0
 oven_amount_ok_max = 18.0
 oven_amount_to_fill = 4.0
-oven_consumption_rate = 0.1
+oven_consumption_rate = 0.3
 
 storage_amount = 64.0
 storage_amount_max = 64.0
 
-# The Silo
-silo_amount_initial = 0.5
-silo_amount = silo_amount_initial
-silo_amount_max = 1.0
-silo_charge = 0
-silo_use = 0
+
+
 
 
 def fillOven():
@@ -124,6 +107,21 @@ def fillOven():
     elif spaceInOven >= oven_amount_to_fill:
         oven_amount    = oven_amount + storage_amount
         storage_amount = 0
+
+
+# ------------------------------------------------------------------------------------------- #
+# ---------------------------------- Vind generator ----------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+vind_n      = 0
+vind_N      = 15
+vind_mean   = 20
+vind_sd     = 15
+vind_alpha  = 0.01 # Alpha value for 1st order lowpass filter
+vind_a1     = 0.1  # 
+vind_v1     = vind_mean
+vind_value  = vind_mean
+vind_tmp    = vind_mean
+vind_vector = np.zeros(481)
 
 def vind():
     global vind_value, vind_v1, vind_tmp, vind_n, vind_sd
@@ -141,13 +139,10 @@ def vind():
 def makeNewVindParameters():
     global vind_value, vind_v1, vind_tmp, vind_n, vind_sd, vind_mean, vind_vector
     # Reset Vind
-    vind_mean   = np.random.normal(1000, 1000)
+    vind_mean   = np.random.normal(10.0, 10.0)
     if vind_mean<0:
         vind_mean = 0
-    vind_sd   = abs(np.random.normal(0, 1500))
-
-    vind_mean = vind_mean * el_mul
-    vind_sd   = vind_sd   * el_mul
+    vind_sd   = abs(np.random.normal(0.0, 15.0))
 
     vind_v1     = vind_mean
     vind_value  = vind_mean
@@ -156,8 +151,9 @@ def makeNewVindParameters():
         vind_vector[x] = vind()
 
 
-
-# Sol generator
+# ------------------------------------------------------------------------------------------- #
+# ---------------------------------- Sol generator ------------------------------------------ #
+# ------------------------------------------------------------------------------------------- #
 sol_alpha  = 0.1 # Alpha value for 1st order lowpass filter
 sol_max    = 0.07 * mw_needed.mean()
 sol_v1  = 0.0
@@ -189,45 +185,120 @@ def makeNewSolVector():
         sol_vector[x] = sol(td)
 
 
-# Compute the Total Production
-bio_max = 60
+# ------------------------------------------------------------------------------------------- #
+# ---------------------------------- Engegi Produktion -------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+bio_max = 60 # MW
 bio_raw = 0.0
-bio_alpha = 0.03 # Alpha value for 1st order lowpass filter
+bio_alpha_up   = 0.008 # Alpha value for 1st order lowpass filter
+bio_alpha_down = 0.004 # Alpha value for 1st order lowpass filter
+bio_alpha_empty = 0.01 # Alpha value for 1st order lowpass filter
 bio_v1 = 0.0
-bio_value = 0.0
+bio_value = need_vector[0]
 
 def bio():
-    global bio_raw, bio_value, bio_v1, oven_amount
+    global bio_value, bio_v1, oven_amount
     #bio_v1 = bio_raw*bio_alpha + bio_v1*(1-bio_alpha) # Compute 2nd lowpass filter
     bio_v1 = bio_raw
-    oven_factor = 0.9 + 0.3*oven_amount/oven_amount_max
+    oven_factor = 0.8 + 0.3*oven_amount/oven_amount_max
     bio_factor = 1.0
 
-    consumption = (0.9 + 0.3*bio_v1/bio_max) * oven_factor * oven_consumption_rate
+    consumption = (0.3 + 0.7*bio_v1/bio_max) * oven_factor * oven_consumption_rate
 
     if oven_amount > oven_amount_ok_max+0.5:
         consumption *= 1 + (oven_amount - oven_amount_ok_max)
     elif oven_amount < oven_amount_ok_min-0.5:
-        bio_factor = max(1 - 0.2*(oven_amount_ok_min - oven_amount), 0.0)
+        bio_factor = max(1 - 0.02*(oven_amount_ok_min - oven_amount), 0.0)
 
         
     oven_amount = max(oven_amount - consumption, 0.0)
 
-    if(oven_amount == 0.0): bio_factor = 0
+    if oven_amount == 0.0:
+        bio_factor = 0
+        bio_value = bio_value*(1-bio_alpha_empty) # Compute 2nd lowpass filter
+    else: 
+        bio_new = bio_v1 * bio_factor
+        if bio_new > bio_value:
+            bio_value = bio_new*bio_alpha_up + bio_value*(1-bio_alpha_up) # Compute 2nd lowpass filter
+        elif bio_new < bio_value:
+            bio_value = bio_new*bio_alpha_down + bio_value*(1-bio_alpha_down) # Compute 2nd lowpass filter
 
-    bio_new = bio_v1 * bio_factor
-    bio_value = bio_new*bio_alpha + bio_value*(1-bio_alpha) # Compute 2nd lowpass filter
 
     return bio_value
+
+# ------------------------------------------------------------------------------------------- #
+# ---------------------------------- Silo --------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+silo_capacity = 185 # MWh
+silo_amount_initial = 70 # MWh
+silo_amount = silo_amount_initial
+silo_charge = False
+silo_charge_rate_max = 18 # MW
+silo_charge_rate = 0
+
+silo_use = False
+silo_use_rate_max = 18 # MW
+silo_use_rate = 0
+
+silo_alpha = 0.3
+
+def silo_init():
+    global silo_amount
+    silo_amount = silo_amount_initial
+
+def silo_amount_pct():
+    return silo_amount / silo_capacity
+
+def silo_charge_process(index):
+    global silo_amount, silo_charge_rate
+
+    if silo_charge:
+        max_charge_rate = max(min(bio_value-need_vector[index],silo_charge_rate_max),0)
+        if silo_amount >= silo_capacity:
+            max_charge_rate = 0.0
+        silo_charge_rate = max_charge_rate*silo_alpha + silo_charge_rate*(1.0-silo_alpha) # Process Lowpass Filter
+    else:
+        silo_charge_rate = silo_charge_rate*(1.0-silo_alpha) # Process Lowpass Filter
+
+    silo_charge_k = silo_charge_rate / 10.0
+
+    silo_amount = silo_amount + silo_charge_k 
+
+    if silo_amount > silo_capacity:
+        silo_amount = silo_capacity
+
+    return silo_charge_rate
+
+def silo_use_process(index):
+    global silo_amount, silo_use_rate
+
+    if silo_use:
+        max_use_rate = max(min(need_vector[index]-bio_value,silo_use_rate_max),0)
+        silo_use_rate = max_use_rate*silo_alpha + silo_use_rate*(1.0-silo_alpha) # Process Lowpass Filter
+    else:
+        silo_use_rate = silo_use_rate*(1.0-silo_alpha) # Process Lowpass Filter
+
+
+    silo_use_k = silo_use_rate / 10.0
+
+    if silo_use_k > silo_amount:
+        ret = silo_amount * 10
+        silo_amount = 0
+        return ret 
+    else:
+        silo_amount = silo_amount - silo_use_k
+
+    return silo_use_rate
 
 
 # Compute the Total Production
 production_alpha = 0.5 # Alpha value for 1st order lowpass filter
-production_value = vind_mean
+production_value = need_vector[0]
 
 def production(index):
-    global production_value, bio_raw
-    p = vind_vector[index] + sol_vector[index] + bio()
+    global production_value
+    # p = vind_vector[index] + sol_vector[index] + bio()
+    p = bio() - silo_charge_process(index) + silo_use_process(index)
     production_value = p*production_alpha + production_value*(1-production_alpha)
     return production_value
 
@@ -247,33 +318,37 @@ ax1.set_xticklabels(xlabels)
 # Plot the Range as to stay within 
 ax1.fill_between(time_vector, need_min_vector, need_max_vector, label="Behov")
 
-#lb, = ax1.plot(x_values,b_values,'g-', label="Biomasse / Affald") # Create a line with the data
+lb, = ax1.plot(x_values,b_values,'r-', label="Produktion") # Create a line with the data
 #lv, = ax1.plot(x_values,v_values,'b-', label="Vind") # Create a line with the data
-l,  = ax1.plot(x_values,y_values,'r-', label="Produktion") # Create a line with the data
-ls, = ax1.plot(x_values,s_values,'k-', label="Energi til Net") # Create a line with the data
+l,  = ax1.plot(x_values,y_values,'k-', label="Energi Til Net") # Create a line with the data
+#ls, = ax1.plot(x_values,s_values,'k-', label="Energi til Net") # Create a line with the data
 
 ax1.legend(loc='upper left')
+plt.grid(True)
+
 
 def sendElData():
-    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value, oven_amount, storage_amount, production_value, need_min_vector[index], run, silo_amount])
+    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value/bio_max, oven_amount, storage_amount, production_value, need_min_vector[index], run, silo_amount_pct()])
 
 def updatePlot():
     l.set_xdata(x_values)
     l.set_ydata(y_values)
-    #lb.set_xdata(x_values)
-    #lb.set_ydata(b_values)
+    lb.set_xdata(x_values)
+    lb.set_ydata(b_values)
     #lv.set_xdata(x_values)
     #lv.set_ydata(v_values)
-    ls.set_xdata(x_values)
-    ls.set_ydata(s_values)
+    #ls.set_xdata(x_values)
+    #ls.set_ydata(s_values)
     sendElData()
 
 
 def clear():
-    global x_values, y_values, b_values, v_values, s_values, bio_raw, bio_value, index, run, t, td
+    global x_values, y_values, b_values, v_values, s_values, bio_value, index, run, t, td
     global vind_v1, vind_value, vind_tmp, production_value
     global storage_amount, oven_amount
     global steps
+    global silo_amount
+
     x_values = []
     y_values = []
     b_values = []
@@ -283,12 +358,16 @@ def clear():
     oven_amount = oven_amount_initial
     makeNewVindParameters()
     makeNewSolVector()
-    bio_value = need_vector[0] - vind_vector[0]
+    bio_value = need_vector[0]
     index = 0
     t = 0
     td = 0
     production_value = need_vector[0]
     steps = 0
+
+    # Init Silo
+    silo_init()
+
     updatePlot()
 
 
@@ -312,7 +391,7 @@ def animate(i):
         updatePlot()     
         index = index+1
 
-    time.sleep(.02)
+    time.sleep(.02*5)
 
 # --------------------------------------------------------------
 # ------------------------- OSC --------------------------------
@@ -324,7 +403,7 @@ def oscValue(addr, value):
     print("[{0}] ~ {1}".format(addr, bio_raw))
 
 def oscCmd(addr, value):
-    global x_values, y_values, bio_raw, index, run, silo_charge, silo_use
+    global x_values, y_values, index, run, silo_charge, silo_use
     if value == 'clear':
         clear()
     elif value == 'run':
@@ -337,14 +416,17 @@ def oscCmd(addr, value):
         run = 1
     elif value == 'FillButton':
         fillOven()
-    elif value == 'ChargeSiloOn':
-        silo_charge = 1
-    elif value == 'ChargeSiloOff':
-        silo_charge = 0
-    elif value == 'UseSiloOn':
-        silo_use = 1
-    elif value == 'UseSiloOff':
-        silo_use = 0
+    elif value == 'ChargeSiloT':
+        silo_charge = True
+    elif value == 'ChargeSiloF':
+        silo_charge = False
+    elif value == 'UseSiloT':
+        silo_use = True
+    elif value == 'UseSiloF':
+        silo_use = False
+    elif value == 'Reset':
+        run = 0
+        clear()
         
     print("[{0}] ~ {1}".format(addr, value))
 
