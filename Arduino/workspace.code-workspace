@@ -16,7 +16,8 @@
 			"bitset": "cpp",
 			"memory": "cpp",
 			"optional": "cpp",
-			"random": "cpp"
+			"random": "cpp",
+			"__locale": "cpp"
 		}
 	}
 }

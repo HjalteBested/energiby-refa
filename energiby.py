@@ -328,7 +328,7 @@ plt.grid(True)
 
 
 def sendElData():
-    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value/bio_max, oven_amount, storage_amount, production_value, need_min_vector[index], run, silo_amount_pct()])
+    oscSenderTeensy.send_message("/ElData", [vind_vector[index], sol_vector[index], bio_value/bio_max, oven_amount, storage_amount, production_value, need_min_vector[index], run, silo_amount_pct(), t])
 
 def updatePlot():
     l.set_xdata(x_values)

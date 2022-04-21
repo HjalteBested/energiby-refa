@@ -108,7 +108,14 @@ bool city_missing_electricity = true;
 bool elActive = true;
 bool heatActive = true;
 
-float timeOfDay = 0.0f;
+float time = 11.0f;
+float timeOfDay = time;
+
+void setTime(float t){
+  time = t;
+  timeOfDay = time;
+  while(timeOfDay > 24.0f) timeOfDay -= 24.0f;
+}
 
 // A Lowpass Filter
 struct OnePole {
@@ -166,7 +173,7 @@ EthernetUDP Udp;
 // ----------------------------------------- //
 const unsigned int localPort = 7134;         // local port to listen for OSC packets (actually not used for sending)
 
-const IPAddress PiIp(192,168,0,103);        // remote IP of your computer
+const IPAddress PiIp(192,168,0,101);        // remote IP of your computer
 const unsigned int PiPort   = 7133;         // remote port to receive OSC
 
 const IPAddress BroadCastIp(255,255,255,255);     // remote IP of your computer
@@ -274,16 +281,11 @@ int lastAirSpeed = 0;
 // Output for lights in city
 
 struct CityLight {
-  CityLight(uint8_t a_pin, uint8_t a_pwm, bool a_on, float a_onTime, float a_offTime, float a_onTime2 = -1.0f, float a_offTime2 = 1.0f)
-  :pin(a_pin), pwm(a_pwm), on(a_on), onTime(a_onTime), offTime(a_offTime), onTime2(a_onTime2), offTime2(a_offTime2), initOn(a_on){}
+  CityLight(uint8_t a_pin, uint8_t a_pwm, bool a_on, float a_onTime, float a_offTime, float a_onTime2=666, float a_offTime2=667)
+  :pin(a_pin), pwm(a_pwm), on(a_on), onTime(a_onTime), offTime(a_offTime), onTime2(a_onTime+24), offTime2(a_offTime+24), initOn(a_on){}
 
-  void update(float timeOfDay){
-    if     (on && lastTimeOfDay < offTime && timeOfDay >= offTime) on = false;
-    else if(!on && lastTimeOfDay < onTime && timeOfDay >= onTime)  on = true;
-    else if(on && onTime2 >= 0  && lastTimeOfDay < offTime2 && timeOfDay >= offTime2) on = false;
-    else if(!on && onTime2 >= 0 && lastTimeOfDay < onTime2 && timeOfDay >= onTime2)   on = true;
-
-    lastTimeOfDay = timeOfDay;
+  bool update(float t){
+    return on = (t >= onTime && t <= offTime) || (t >= onTime2 && t <= offTime2);
   }
 
   void init(){
@@ -299,32 +301,25 @@ struct CityLight {
   float offTime2;
 
   bool initOn;
-  float lastTimeOfDay = 0.0f;
 };
 
-#define NUM_cityLights 12
+#define NUM_cityLights 8
 CityLight cityLights[NUM_cityLights] = {
-  CityLight( 0, 255, false, 9.00, 19.00),    // Bygning hvor varmen går ind
-  CityLight( 1, 255, false, 8.00, 23.95),    // Hvid etage bolig midt højre
-  CityLight( 2, 255, true , 0.00, 48.00),    // Industri bagerst til hjøre
-  CityLight( 3, 255, false, 6.70, 22.7),    // Etagebolig (stor) bag blå hus
-  CityLight( 4, 255, true , 0.00, 48.0),    // Kraftværk (el)
-  CityLight( 5, 255, true , 7.40, 1.00),    // Etagebolig (lille) bag blå hus
-  CityLight( 7, 255, false, 7.0 , 23.00),    // Lille røde hus
-  CityLight( 8, 255, false, 8.55, 17.19),    // Brun erhverv
-  CityLight( 9, 255, true , 0.0 , 48.0  ),    // Fjernvarme
-  CityLight(10, 255, false, 7.70, 16.66),    // Rådhus
-  CityLight(11, 255, false, 7.75, 15.90),   // Lille Skole
-  CityLight(12, 255, false, 6.90, 23.30),   // Vinkel Byhus / Erhverv
-  // CityLight(24, 255, false, 6.00, 22.0),    // Sort / Hvid Villa
-  // CityLight(25, 255, false, 6.50, 22.8),  // Stor etage bolig bag rådhus
-  // CityLight(28, 255, true , 7.80,  2.0),    // Moderne hvid firkant bolig
+  CityLight( 3, 255, true , 0.00, 48.00, 1000, 10000),   // Kraftværk Kontor
+  CityLight( 4, 255, true , 10.0, 17.00, 10.0, 17.00),   // Vandtårn              
+  CityLight( 5, 255, true , 0.00, 48.00, 1000, 10000),   // Kraftværk Hovedbygning
+  CityLight( 6, 255, true , 6.00, 21.30, 6.00, 21.30),   // Røde Huse 
+  CityLight( 8, 255, true , 7.00, 23.00, 7.00, 23.00),   // Blå / Store Hvide byhuse
+  CityLight(10, 255, true , 7.70, 26.00, 7.70, 26.00),   // Stor boligblok / lille hvidt hus
+  CityLight(11, 255, true , 7.40, 23.90, 7.40, 23.90),   // Firkant Blok / byhus
+  CityLight(12, 255, true , 5.00, 21.00, 5.00, 21.00),   // Fabrik / Bondehus
 };
+
 
 
 // Windmill
-const uint8_t windmill_PIN   = 29;
-const uint8_t windmill_speed = 30;
+const uint8_t windmill_PIN   = 9;
+const uint8_t windmill_speed = 15;
 
 
 // Analog Input Variables
@@ -341,6 +336,8 @@ void setup() {
 
     
     pinMode(windmill_PIN, OUTPUT);
+    analogWriteFrequency(windmill_PIN, 93750); // Teensy 3.0 pin 3 also changes to 375 kHz
+
     analogWrite(windmill_PIN, 0);
 
     // Setup Buttons
@@ -358,7 +355,7 @@ void setup() {
 
     for(int i=0; i<NUM_cityLights; i++){
       analogWrite(cityLights[i].pin, cityLights[i].pwm);
-      delay(100);
+      delay(300);
     }
 
     Serial.println("....done");
@@ -380,6 +377,7 @@ void setup() {
     // colorWipe(Adafruit_NeoPixel::Color(  0, 255,   0)     , 2); // Green
     // colorWipe(Adafruit_NeoPixel::Color(  0,   0, 255)     , 2); // Blue
     // colorWipe(Adafruit_NeoPixel::Color(255, 255, 255)     , 2); // White
+    // while(1) {}
     colorWipe(Adafruit_NeoPixel::Color(  0,   0,   0)     , 2); // Black
     Serial.println("....done");
 
@@ -406,9 +404,8 @@ void setup() {
 
     digitalWrite(LED_BUILTIN, 0);    // turn *off* led
 
+    reset();   
 
-
-    reset();
 
 }
 
@@ -420,7 +417,9 @@ void reset(){
   startButton .setValue(false);
   chargeButton.setValue(false);
   useButton   .setValue(false);
+  setTime(12.0f);
 }
+
 
 // Fill strip pixels one after another with a color. Strip is NOT cleared
 // first; anything there will be covered pixel by pixel. Pass in color
@@ -513,6 +512,7 @@ bool loopButtons(){
           activity = true;
       }
       else if(startButton.bounce.risingEdge()){
+          reset();
           sendCmd(chargeButton.getValue() ? "ChargeSiloT" : "ChargeSiloF");
           sendCmd(useButton   .getValue() ? "UseSiloT"    : "UseSiloF"   );
           sendAirSpeed();
@@ -537,12 +537,9 @@ bool loopButtons(){
           sendCmd(chargeButton.toggle() ? "ChargeSiloT" : "ChargeSiloF");
           activity = true;
       }
-      bool productionOk = productionPercent >= 1.0f;
-      elAmount   = elActive && productionOk ? 1.0f : 0.0f;
-      heatAmount = heatActive && productionOk ? 1.0f : 0.0f;
 
-      elFilter  .process(elAmount);
-      heatFilter.process(heatAmount);
+
+      cityStatusLoop();
 
       buttonReadMillis = 0;
     }
@@ -651,9 +648,11 @@ void heatPixelLoop(){
   strip6.show();  
 }
 
+
 void pixelLoop(){
+  auto tmpVind = gameRunning ? vind : 0.0f;
   if(pixelUpdateMillis > pixelUpdateInterval){
-    setBarLed(vind_strip,vind_pixelOffset,vind_numPixels,vind/vind_max,0,0,255,false);
+    setBarLed(vind_strip,vind_pixelOffset,vind_numPixels,tmpVind/vind_max,0,0,255,false);
     setBarLed(sol_strip ,sol_pixelOffset ,sol_numPixels ,sol/sol_max  ,255,100,0,false);
     setBarLed(bio_strip ,bio_pixelOffset ,bio_numPixels ,bio  ,0,255,0,true);
     setBarLed(strip2, 26, 26, oscAirSpeed, 0  , 100, 255, false);
@@ -662,8 +661,8 @@ void pixelLoop(){
     siloPixelLoop();
     heatPixelLoop();
     
-    if(vind > 0){
-      analogWrite(windmill_PIN, 15+windmill_speed*vind/vind_max);
+    if(tmpVind > 0){
+      analogWrite(windmill_PIN, 20+windmill_speed*tmpVind/vind_max);
     }
     else {
       analogWrite(windmill_PIN, 0);
@@ -675,9 +674,19 @@ void pixelLoop(){
 }
 
 void cityStatusLoop(){
-  city_power_status_strip.setPixelColor(0, city_missing_heat        ? 255 : 0, 0, 0);
-  city_power_status_strip.setPixelColor(1, city_missing_electricity ? 255 : 0, 0, 0);
-  city_power_status_strip.show();
+    bool productionOk = productionPercent >= 1.0f;
+    elAmount   = elActive   && productionPercent > 0.70f ? 1.0f : 0.0f;
+    heatAmount = heatActive && productionPercent > 0.95f ? 1.0f : 0.0f;
+
+    heatFilter.process(heatAmount);
+    elFilter  .process(elAmount);
+
+    city_missing_heat        = heatFilter.getValue() < 0.9;
+    city_missing_electricity = elFilter  .getValue() < 0.01;
+
+    city_power_status_strip.setPixelColor(0, city_missing_heat        ? 255 : 0, 0, 0);
+    city_power_status_strip.setPixelColor(1, city_missing_electricity ? 255 : 0, 0, 0);
+    city_power_status_strip.show();
 }
 
 void cityLightsLoop(){
@@ -685,15 +694,12 @@ void cityLightsLoop(){
 
     for(int i=0; i<NUM_cityLights; i++){
       auto& x = cityLights[i];
-      x.update(timeOfDay);
-      if(x.on && i < elFilter.value*NUM_cityLights){
+      if(x.update(time) && i < elFilter.value*NUM_cityLights){
         analogWrite(x.pin, x.pwm * elFilter.value);
       }
       else {
         analogWrite(x.pin, 0);
       }
-
-      cityLights[i].lastTimeOfDay = timeOfDay;
     }
 
     cityLightMillis = 0;
@@ -709,7 +715,6 @@ void loop(){
 
   if(!oscActivity){
     pixelLoop();
-    cityStatusLoop();
     cityLightsLoop();
 
 
@@ -759,6 +764,7 @@ void oscElData(OSCMessage& msg){
   if(msg.isFloat(6)) productionMin      = msg.getFloat(6);
   if(msg.isInt  (7)) gameRunning        = msg.getInt  (7);
   if(msg.isFloat(8)) silo_available_pct = msg.getFloat(8);
+  if(msg.isFloat(9)) setTime(msg.getFloat(9));
 
   Serial.print("Vind: ");               Serial.println(vind);
   Serial.print("Sol: ");                Serial.println(sol);
@@ -769,6 +775,8 @@ void oscElData(OSCMessage& msg){
   Serial.print("productionMin: ");      Serial.println(productionMin);
   Serial.print("gameRunning: ");        Serial.println(gameRunning);
   Serial.print("silo_available_pct: "); Serial.println(silo_available_pct);
+  Serial.print("time: ");               Serial.print(time);
+  Serial.print(", DayTime: ");          Serial.println(timeOfDay);
 
   productionPercent = production / productionMin;
   if(productionPercent > 1.0f) productionPercent = 1.0f;
