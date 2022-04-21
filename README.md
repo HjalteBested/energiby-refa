@@ -90,7 +90,9 @@ WantedBy=graphical.target
 ```
 
 # Hide Mouse Pointer on Boot
+```bash
 sudo sed -i -- "s/#xserver-command=X/xserver-command=X -nocursor/" /etc/lightdm/lightdm.conf
+```
 
 # Access
 --- RaspberryPi ---
